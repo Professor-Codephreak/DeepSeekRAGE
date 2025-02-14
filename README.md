@@ -13,3 +13,7 @@ source rage/bin/activate
 ```python
 pip install --no-cache-dir -r requirements.txt
 ```
+
+```python
+streamlit run rage.py
+```
