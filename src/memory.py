@@ -8,8 +8,8 @@ from dataclasses import dataclass, asdict
 import hashlib
 from pathlib import Path
 import logging
-import faiss
-import numpy as np
+#import faiss
+#import numpy as np
 from tqdm import tqdm
 import requests
 import streamlit as st
