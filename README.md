@@ -1,5 +1,12 @@
 # DeepSeekRAGE
-Retrieval Augmented Generative Engine with DeepSeek RAGE
+Retrieval Augmented Generative Engine with DeepSeek RAGE<br />
+
+RAGE Retrieval Augmented Generative Engine is a dynamic engine designed to learn from context, injest and memory over time. While I have had the idea for sometime no working expression of RAGE has been created, until this weekend.
+
+# Context-Aware Responses: 
+By leveraging the continuously updated data and learning from past interactions, RAGE can understand and respond to nuances in user queries. This ability makes it particularly effective in scenarios where context heavily influences the nature of the response.
+# Adaptive Response Generation: 
+As RAGE evolves, it becomes more adept at predicting user needs and adjusting its responses accordingly, ensuring high relevance and personalization.
 
 ```python
 git clone https://github.com/GATERAGE/DeepSeekRAGE
