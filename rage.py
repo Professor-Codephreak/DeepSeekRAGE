@@ -13,7 +13,7 @@ from src.memory import (
     DialogEntry,
     store_conversation
 )
-from src.config import get_config, get_model_config
+#from src.config import get_config, get_model_config
 from src.logger import get_logger
 from src.openmind import OpenMind
 
