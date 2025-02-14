@@ -11,3 +11,5 @@ python3.11 -m venv rage
 source rage/bin/activate
 ```
 ```python
+pip install --no-cache-dir -r requirements.txt
+```
