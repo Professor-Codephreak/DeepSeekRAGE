@@ -1,5 +1,5 @@
 # rage.py (c) 2025 Gregory L. Magnusson MIT license
-# RAGE Retieval Augmented Generative Enging (c) 2025 rage.pythai.net
+# RAGE Retrieval Augmented Generative Engine (c) 2025 rage.pythai.net
 
 import sys
 from pathlib import Path
@@ -13,7 +13,7 @@ from src.memory import (
     DialogEntry,
     store_conversation
 )
-#from src.config import get_config, get_model_config
+# from src.config import get_config, get_model_config  # Commented out
 from src.logger import get_logger
 from src.openmind import OpenMind
 
@@ -25,8 +25,8 @@ class RAGE:
     
     def __init__(self):
         self.setup_session_state()
-        self.config = get_config()
-        self.model_config = get_model_config()
+        # self.config = get_config()  # Commented out
+        # self.model_config = get_model_config()  # Commented out
         self.load_css()
         
         # Initialize systems
@@ -61,7 +61,7 @@ class RAGE:
     def load_css(self):
         """Load CSS styling."""
         try:
-            with open('styles.css') as f:
+            with open('gfx/styles.css') as f:
                 st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
         except Exception as e:
             logger.error(f"Error loading CSS: {e}")
@@ -204,25 +204,25 @@ class RAGE:
                     key='ollama_model_select'
                 )
             
-            # Display model information
-            if st.session_state.selected_model:
-                model_info = self.model_config.get_model_info(
-                    st.session_state.provider.lower(),
-                    st.session_state.selected_model
-                )
-                if model_info:
-                    st.markdown("### Model Information")
-                    st.markdown(f"""
-                    <div class="model-info">
-                        <p><strong>Model:</strong> {model_info.name}</p>
-                        <p><strong>Developer:</strong> {model_info.developer}</p>
-                        <p><strong>Max Tokens:</strong> {model_info.tokens}</p>
-                        <p><strong>Cost:</strong> {model_info.cost}</p>
-                        <div><strong>Capabilities:</strong></div>
-                        {''.join([f'<span class="capability-tag">{cap}</span>' 
-                                for cap in model_info.capabilities])}
-                    </div>
-                    """, unsafe_allow_html=True)
+            # Display model information (commented out since model_config is removed)
+            # if st.session_state.selected_model:
+            #     model_info = self.model_config.get_model_info(
+            #         st.session_state.provider.lower(),
+            #         st.session_state.selected_model
+            #     )
+            #     if model_info:
+            #         st.markdown("### Model Information")
+            #         st.markdown(f"""
+            #         <div class="model-info">
+            #             <p><strong>Model:</strong> {model_info.name}</p>
+            #             <p><strong>Developer:</strong> {model_info.developer}</p>
+            #             <p><strong>Max Tokens:</strong> {model_info.tokens}</p>
+            #             <p><strong>Cost:</strong> {model_info.cost}</p>
+            #             <div><strong>Capabilities:</strong></div>
+            #             {''.join([f'<span class="capability-tag">{cap}</span>' 
+            #                     for cap in model_info.capabilities])}
+            #         </div>
+            #         """, unsafe_allow_html=True)
     
     def run(self):
         """Run the RAGE interface."""
@@ -247,7 +247,7 @@ class RAGE:
             
         except Exception as e:
             logger.error(f"Main application error: {e}")
-            st.error("An error occurred in the application refresh the page.")
+            st.error("An error occurred in the application. Please refresh the page.")
 
 def main():
     rage = RAGE()
