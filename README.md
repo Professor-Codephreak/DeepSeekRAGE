@@ -1,5 +1,6 @@
 # DeepSeekRAGE
-Retrieval Augmented Generative Engine with DeepSeek RAGE<br />
+Retrieval Augmented Generative Engine<br />
+DeepSeek RAGE<br />
 
 RAGE Retrieval Augmented Generative Engine is a dynamic engine designed to learn from context, injest and memory over time. While I have had the idea for sometime no working expression of RAGE has been created, until this weekend.
 
