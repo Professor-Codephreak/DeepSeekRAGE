@@ -1,6 +1,6 @@
 # src/locallama.py (c) 2025 Gregory L. Magnusson MIT License
 
-from typing import Optional, List, Dict, Any, Generator
+from typing import Optional, List, Dict, Any, Generator, Union
 import requests
 import logging
 from dataclasses import dataclass
