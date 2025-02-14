@@ -8,8 +8,6 @@ from dataclasses import dataclass, asdict
 import hashlib
 from pathlib import Path
 import logging
-#import faiss
-#import numpy as np
 from tqdm import tqdm
 import requests
 import streamlit as st
@@ -75,7 +73,6 @@ class MemoryManager:
         self.memory_structure = {
             'conversations': self.base_dir / 'conversations',
             'knowledge': self.base_dir / 'knowledge',
-            'embeddings': self.base_dir / 'embeddings',
             'cache': self.base_dir / 'cache',
             'index': self.base_dir / 'index'
         }
@@ -87,10 +84,9 @@ class MemoryManager:
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._create_session_file()
         
-        # Initialize FAISS index
-        self.index = None
+        # Initialize documents list
         self.documents = []
-        self._load_existing_index()
+        self._load_existing_documents()
 
     def _initialize_memory_system(self):
         """Initialize memory system and create directories"""
@@ -135,39 +131,30 @@ class MemoryManager:
             self.logger.error(f"Failed to read JSON file {filepath}: {e}")
             return None
 
-    def _load_existing_index(self):
-        """Load existing index and documents if available"""
+    def _load_existing_documents(self):
+        """Load existing documents if available"""
         try:
-            index_path = self.memory_structure['index'] / "faiss_index.bin"
             docs_path = self.memory_structure['knowledge'] / "documents.json"
-            
-            if index_path.exists() and docs_path.exists():
-                self.index = faiss.read_index(str(index_path))
+            if docs_path.exists():
                 docs_data = self._read_json(docs_path)
                 if docs_data:
                     self.documents = [MemoryEntry(**doc) for doc in docs_data]
-                self.logger.info(f"Loaded {len(self.documents)} documents from existing index")
+                self.logger.info(f"Loaded {len(self.documents)} documents from existing knowledge base")
         except Exception as e:
-            self.logger.error(f"Error loading existing index: {e}")
-            self.index = None
+            self.logger.error(f"Error loading existing documents: {e}")
             self.documents = []
 
     def get_relevant_context(self, query: str, k: int = 3) -> str:
-        """Get relevant context for query"""
+        """Get relevant context for query (simplified without embeddings)"""
         try:
-            if not self.index or not self.documents:
+            if not self.documents:
                 return ""
             
-            # Get query embedding from Ollama
-            embedding = self.get_embedding(query)
-            if embedding is None:
-                return ""
-            
-            # Search for similar documents
-            D, I = self.index.search(np.array([embedding]), k)
-            
-            # Get relevant documents
-            results = [self.documents[i] for i in I[0] if i < len(self.documents)]
+            # Simple keyword-based search (replace with a better search mechanism if needed)
+            results = [
+                doc for doc in self.documents
+                if query.lower() in doc.content.lower()
+            ][:k]
             
             # Combine content from relevant documents
             context = "\n\n".join([
@@ -181,28 +168,6 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error getting relevant context: {e}")
             return ""
-
-    def get_embedding(self, text: str) -> Optional[np.ndarray]:
-        """Get embedding using Ollama"""
-        try:
-            response = requests.post(
-                "http://localhost:11434/api/embeddings",
-                json={
-                    "model": "nomic-embed-text",
-                    "prompt": text
-                }
-            )
-            
-            if response.status_code == 200:
-                embedding = response.json()['embedding']
-                return np.array(embedding, dtype=np.float32)
-            else:
-                self.logger.error(f"Error getting embedding: {response.text}")
-                return None
-                
-        except Exception as e:
-            self.logger.error(f"Error generating embedding: {e}")
-            return None
 
     def store_conversation(self, entry: DialogEntry) -> bool:
         """Store conversation entry"""
@@ -239,34 +204,18 @@ class MemoryManager:
             return False
 
     def store_memory(self, entry: MemoryEntry) -> bool:
-        """Store memory entry with embedding"""
+        """Store memory entry (without embeddings)"""
         try:
-            # Get embedding if not provided
-            if entry.embedding is None:
-                embedding = self.get_embedding(entry.content)
-                if embedding is not None:
-                    entry.embedding = embedding.tolist()
-            
             # Save memory entry
             memory_file = self.memory_structure['knowledge'] / f"memory_{entry.entry_id}.json"
             memory_data = asdict(entry)
             
-            if entry.embedding is not None:
-                # Update FAISS index
-                if self.index is None:
-                    dim = len(entry.embedding)
-                    self.index = faiss.IndexFlatL2(dim)
-                
-                self.index.add(np.array([entry.embedding]))
-                self.documents.append(entry)
-                
-                # Save updated index
-                index_path = self.memory_structure['index'] / "faiss_index.bin"
-                faiss.write_index(self.index, str(index_path))
-                
-                # Save documents data
-                docs_path = self.memory_structure['knowledge'] / "documents.json"
-                self._write_json(docs_path, [asdict(doc) for doc in self.documents])
+            # Add to documents list
+            self.documents.append(entry)
+            
+            # Save documents data
+            docs_path = self.memory_structure['knowledge'] / "documents.json"
+            self._write_json(docs_path, [asdict(doc) for doc in self.documents])
             
             return self._write_json(memory_file, memory_data)
             
