@@ -1,26 +1,17 @@
 # rage.py (c) 2025 Gregory L. Magnusson MIT license
+# RAGE Retieval Augmented Generative Enging (c) 2025 rage.pythai.net
 
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 import streamlit as st
-import time
-from datetime import datetime
-from typing import Dict, Any, Optional
-from src.models import (
-    # GPT4Handler, 
-    # GroqHandler, 
-    # TogetherHandler, 
-    OllamaHandler,
-    # HuggingFaceHandler
-)
+from typing import Optional
+from src.locallama import OllamaHandler, OllamaResponse
 from src.memory import (
     memory_manager,
     DialogEntry,
-    MemoryEntry,
-    store_conversation,
-    get_conversation_history
+    store_conversation
 )
 from src.config import get_config, get_model_config
 from src.logger import get_logger
@@ -30,7 +21,7 @@ from src.openmind import OpenMind
 logger = get_logger('rage')
 
 class RAGE:
-    """RAGE - Retrieval Augmented Generative Engine"""
+    """RAGE - Retrieval Augmented Generative Engine (DeepSeeker)"""
     
     def __init__(self):
         self.setup_session_state()
@@ -43,28 +34,18 @@ class RAGE:
         self.openmind = OpenMind()
     
     def setup_session_state(self):
-        """Initialize session state variables"""
+        """Initialize session state variables."""
         if "messages" not in st.session_state:
             st.session_state.messages = []
         if 'provider' not in st.session_state:
-            st.session_state.provider = None
+            st.session_state.provider = "Ollama"  # Ollama localhost
         if 'selected_model' not in st.session_state:
             st.session_state.selected_model = None
-        if 'model_capabilities' not in st.session_state:
-            st.session_state.model_capabilities = []
-        if 'cost_tracking' not in st.session_state:
-            st.session_state.cost_tracking = {"total": 0.0, "session": 0.0}
         if 'model_instances' not in st.session_state:
-            st.session_state.model_instances = {
-                'ollama': None,
-                # 'groq': None,
-                # 'together': None,
-                # 'openai': None,
-                # 'huggingface': None
-            }
+            st.session_state.model_instances = {'ollama': None}
     
     def check_ollama_status(self):
-        """Check Ollama installation and available models"""
+        """Check Ollama installation and available models."""
         try:
             if not st.session_state.model_instances['ollama']:
                 st.session_state.model_instances['ollama'] = OllamaHandler()
@@ -78,7 +59,7 @@ class RAGE:
             return False, []
     
     def load_css(self):
-        """Load CSS styling"""
+        """Load CSS styling."""
         try:
             with open('styles.css') as f:
                 st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
@@ -87,7 +68,7 @@ class RAGE:
             self.load_default_css()
     
     def load_default_css(self):
-        """Load default CSS if custom CSS fails"""
+        """Load default CSS if custom CSS fails."""
         st.markdown("""
             <style>
             .cost-tracker { padding: 10px; background: #262730; border-radius: 5px; }
@@ -114,112 +95,39 @@ class RAGE:
             </style>
         """, unsafe_allow_html=True)
     
-    def initialize_model(self, provider: str) -> Optional[Any]:
-        """Initialize or retrieve model instance"""
+    def initialize_ollama(self) -> Optional[OllamaHandler]:
+        """Initialize or retrieve Ollama model instance."""
         try:
-            if not provider:
-                st.info("Please select an AI Provider")
-                return None
+            if not st.session_state.model_instances['ollama']:
+                st.session_state.model_instances['ollama'] = OllamaHandler()
             
-            # if provider == "Together":
-            #     key = self.openmind.get_api_key('together')
-            #     if key:
-            #         if not st.session_state.model_instances['together']:
-            #             st.session_state.model_instances['together'] = TogetherHandler(key)
-            #         return st.session_state.model_instances['together']
-            #     else:
-            #         st.error("Together API key not found")
-            #         return None
-            
-            # elif provider == "Groq":
-            #     key = self.openmind.get_api_key('groq')
-            #     if key:
-            #         if not st.session_state.model_instances['groq']:
-            #             st.session_state.model_instances['groq'] = GroqHandler(key)
-            #         return st.session_state.model_instances['groq']
-            #     else:
-            #         st.error("Groq API key not found")
-            #         return None
-            
-            # elif provider == "OpenAI":
-            #     key = self.openmind.get_api_key('openai')
-            #     if key:
-            #         if not st.session_state.model_instances['openai']:
-            #             st.session_state.model_instances['openai'] = GPT4Handler(key)
-            #         return st.session_state.model_instances['openai']
-            #     else:
-            #         st.error("OpenAI API key not found")
-            #         return None
-            
-            if provider == "Ollama":
-                if not st.session_state.model_instances['ollama']:
-                    st.session_state.model_instances['ollama'] = OllamaHandler()
-                
-                if st.session_state.model_instances['ollama'].check_installation():
-                    available_models = st.session_state.model_instances['ollama'].list_models()
-                    if available_models:
-                        if not st.session_state.selected_model:
-                            st.info("Please select an Ollama model to continue")
-                            return None
-                        
-                        if st.session_state.model_instances['ollama'].select_model(st.session_state.selected_model):
-                            return st.session_state.model_instances['ollama']
-                        else:
-                            st.error(st.session_state.model_instances['ollama'].get_last_error())
-                            return None
+            if st.session_state.model_instances['ollama'].check_installation():
+                available_models = st.session_state.model_instances['ollama'].list_models()
+                if available_models:
+                    if not st.session_state.selected_model:
+                        st.info("Please select an Ollama model to continue")
+                        return None
+                    
+                    if st.session_state.model_instances['ollama'].select_model(st.session_state.selected_model):
+                        return st.session_state.model_instances['ollama']
                     else:
-                        st.error("No Ollama models found. Please pull a model first.")
+                        st.error(st.session_state.model_instances['ollama'].get_last_error())
                         return None
                 else:
-                    st.error("Ollama service is not running. Please start the Ollama service.")
+                    st.error("No Ollama models found. Please pull a model first.")
                     return None
-            
-            # elif provider == "HuggingFace":
-            #     if not st.session_state.model_instances['huggingface']:
-            #         st.session_state.model_instances['huggingface'] = HuggingFaceHandler()
-            #     return st.session_state.model_instances['huggingface']
-            
-            return None
-            
+            else:
+                st.error("Ollama service is not running. Please start the Ollama service.")
+                return None
         except Exception as e:
-            logger.error(f"Error initializing model: {e}")
-            st.error(f"Error initializing model: {str(e)}")
+            logger.error(f"Error initializing Ollama: {e}")
+            st.error(f"Error initializing Ollama: {str(e)}")
             return None
-    
-    def update_cost_tracking(self, response_length: int):
-        """Update cost tracking based on usage"""
-        try:
-            if st.session_state.provider and st.session_state.selected_model:
-                model_info = self.model_config.get_model_info(
-                    st.session_state.provider.lower(),
-                    st.session_state.selected_model
-                )
-                if model_info and 'cost' in model_info:
-                    cost_str = model_info['cost']
-                    if '/1M tokens' in cost_str:
-                        base_cost = float(cost_str.split('$')[1].split('/')[0])
-                        tokens = response_length / 4
-                        cost = (tokens / 1000000) * base_cost
-                    elif '/1K tokens' in cost_str:
-                        base_cost = float(cost_str.split('$')[1].split('/')[0])
-                        tokens = response_length / 4
-                        cost = (tokens / 1000) * base_cost
-                    else:
-                        cost = 0.0
-                    
-                    st.session_state.cost_tracking["session"] += cost
-                    st.session_state.cost_tracking["total"] += cost
-        except Exception as e:
-            logger.error(f"Error updating cost tracking: {e}")
     
     def process_message(self, prompt: str):
-        """Process user message and generate response"""
+        """Process user message and generate response using Ollama."""
         try:
-            if not st.session_state.provider:
-                st.warning("Please select an AI Provider first")
-                return
-            
-            model = self.initialize_model(st.session_state.provider)
+            model = self.initialize_ollama()
             if not model:
                 return
             
@@ -242,10 +150,13 @@ class RAGE:
                             st.error(model.get_last_error())
                             return
                         
+                        # Extract response text if it's an OllamaResponse object
+                        response_text = response.response if isinstance(response, OllamaResponse) else response
+                        
                         # Store conversation
                         dialog_entry = DialogEntry(
                             query=prompt,
-                            response=response,
+                            response=response_text,
                             provider=st.session_state.provider,
                             model=st.session_state.selected_model,
                             context={"retrieved_context": context}
@@ -253,13 +164,12 @@ class RAGE:
                         store_conversation(dialog_entry)
                         
                         # Display response
-                        st.markdown(response)
+                        st.markdown(response_text)
                         
-                        # Update tracking
-                        self.update_cost_tracking(len(response))
+                        # Add assistant message to session state
                         st.session_state.messages.append({
                             "role": "assistant",
-                            "content": response
+                            "content": response_text
                         })
                         
                     except Exception as e:
@@ -270,7 +180,7 @@ class RAGE:
             st.error("An error occurred while processing your message")
     
     def setup_sidebar(self):
-        """Setup sidebar configuration"""
+        """Setup sidebar configuration."""
         with st.sidebar:
             st.header("RAGE Configuration")
             
@@ -286,39 +196,16 @@ class RAGE:
                 if ollama_models:
                     st.caption(f"Available models: {', '.join(ollama_models)}")
             
-            # Provider selection
-            previous_provider = st.session_state.provider
-            st.session_state.provider = st.selectbox(
-                "Select AI Provider",
-                [None, "Ollama"],  # Only Ollama is available
-                format_func=lambda x: "Select Provider" if x is None else x
-            )
-            
-            if previous_provider != st.session_state.provider:
-                st.session_state.selected_model = None
-            
             # Model selection
-            if st.session_state.provider:
-                if st.session_state.provider == "Ollama":
-                    if ollama_models:
-                        st.session_state.selected_model = st.selectbox(
-                            "Select Ollama Model",
-                            options=ollama_models,
-                            key='ollama_model_select'
-                        )
-                # else:
-                #     provider_models = self.model_config.get_provider_models(
-                #         st.session_state.provider.lower()
-                #     )
-                #     if provider_models:
-                #         st.session_state.selected_model = st.selectbox(
-                #             f"Select {st.session_state.provider} Model",
-                #             options=list(provider_models.keys()),
-                #             key=f"{st.session_state.provider.lower()}_model_select"
-                #         )
+            if ollama_models:
+                st.session_state.selected_model = st.selectbox(
+                    "Select Ollama Model",
+                    options=ollama_models,
+                    key='ollama_model_select'
+                )
             
             # Display model information
-            if st.session_state.provider and st.session_state.selected_model:
+            if st.session_state.selected_model:
                 model_info = self.model_config.get_model_info(
                     st.session_state.provider.lower(),
                     st.session_state.selected_model
@@ -338,17 +225,9 @@ class RAGE:
                     """, unsafe_allow_html=True)
     
     def run(self):
-        """Run the RAGE interface"""
+        """Run the RAGE interface."""
         try:
             st.title("RAGE - Retrieval Augmented Generative Engine")
-            
-            # Display cost tracker
-            st.markdown(f"""
-                <div class="cost-tracker">
-                    Session Cost: ${st.session_state.cost_tracking['session']:.4f}<br>
-                    Total Cost: ${st.session_state.cost_tracking['total']:.4f}
-                </div>
-            """, unsafe_allow_html=True)
             
             # Setup sidebar
             self.setup_sidebar()
@@ -363,12 +242,12 @@ class RAGE:
                         st.markdown(message["content"])
             
             # Chat input
-            if prompt := st.chat_input("Enter your query..."):
+            if prompt := st.chat_input("DeepSeek with RAGE..."):
                 self.process_message(prompt)
             
         except Exception as e:
             logger.error(f"Main application error: {e}")
-            st.error("An error occurred in the application. Please try refreshing the page.")
+            st.error("An error occurred in the application refresh the page.")
 
 def main():
     rage = RAGE()
