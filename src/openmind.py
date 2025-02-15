@@ -1,4 +1,5 @@
-# src/openmind.py (updated)
+# src/openmind.py (c) 2025 Gregory L. Magnusson MIT license
+# OpenMind class to loads prompt.txt and system_prompt.txt from prompts
 import os
 from pathlib import Path
 import logging
@@ -6,7 +7,7 @@ import logging
 logger = logging.getLogger('rage.openmind')
 
 class OpenMind:
-    """Central configuration and resource management for RAGE"""
+    """central configuration and resource management for RAGE"""
     
     _instance = None
 
@@ -24,7 +25,7 @@ class OpenMind:
         self.base_path = Path(__file__).parent.parent.resolve()
         self.prompts_path = self.base_path / 'prompts'
         
-        # Load prompts
+        # Load prompts from prompts/prompts.txt and prompts/system_prompt.txt
         self.system_prompt = self._load_prompt('system_prompt.txt')
         self.user_prompt = self._load_prompt('prompt.txt')
         
