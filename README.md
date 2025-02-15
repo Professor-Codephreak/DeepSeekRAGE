@@ -1,4 +1,20 @@
 # RAGE DeepSeek
+
+```txt
+your_project/
+├── src/
+│   ├── memory.py
+│   ├── logger.py
+│   ├── openmind.py
+│   └── locallama.py
+├── gfx/
+│   └── styles.css
+├── memory/
+│   ├── sessions/
+│   ├── knowledge/
+│   └── long_term_memory.json
+└── rage.py
+```txt
 # DeepSeekRAGE
 Retrieval Augmented Generative Engine<br />
 DeepSeek RAGE<br />
