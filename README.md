@@ -14,7 +14,7 @@ your_project/
 │   ├── knowledge/
 │   └── long_term_memory.json
 └── rage.py
-```txt
+```
 # DeepSeekRAGE
 Retrieval Augmented Generative Engine<br />
 DeepSeek RAGE<br />
