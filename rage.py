@@ -36,8 +36,8 @@ class RAGE:
             "model_instances": {'ollama': None},
             "process_running": False,
             "show_search": False,
-            "temperature": 0.7,  # Default temperature
-            "streaming": True,   # Default streaming enabled
+            "temperature": 0.3,  # Default temperature
+            "streaming": False,   # Default streaming enabled
         }
         for var, default in session_vars.items():
             if var not in st.session_state:
@@ -57,24 +57,72 @@ class RAGE:
             logger.error(f"Error checking Ollama status: {e}")
             return False, []
 
+    def initialize_ollama(self) -> Optional[OllamaHandler]:
+        """Initialize or retrieve Ollama model instance."""
+        try:
+            if not st.session_state.model_instances['ollama']:
+                st.session_state.model_instances['ollama'] = OllamaHandler()
+            
+            if st.session_state.model_instances['ollama'].check_installation():
+                available_models = st.session_state.model_instances['ollama'].list_models()
+                if available_models:
+                    if not st.session_state.selected_model:
+                        st.info("Please select an Ollama model to continue")
+                        return None
+                    
+                    if st.session_state.model_instances['ollama'].select_model(st.session_state.selected_model):
+                        return st.session_state.model_instances['ollama']
+                    else:
+                        st.error(st.session_state.model_instances['ollama'].get_last_error())
+                        return None
+                else:
+                    st.error("No Ollama models found. Please pull a model first.")
+                    return None
+            else:
+                st.error("Ollama service is not running. Please start the Ollama service.")
+                return None
+        except Exception as e:
+            logger.error(f"Error initializing Ollama: {e}")
+            st.error(f"Error initializing Ollama: {str(e)}")
+            return None
+
     def load_css(self):
         """Load custom CSS with input field styling."""
         st.markdown("""
             <style>
+            /* Fixed input container at bottom */
             .input-container {
-                display: flex;
                 position: fixed;
-                bottom: 2rem;
-                width: 65%;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                padding: 1rem;
                 background: var(--background-color);
-                padding: 0.5rem;
-                border-radius: 0.5rem;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                border-top: 1px solid #2d2d39;
                 z-index: 100;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
             }
+            
+            /* Chat history container with scroll */
+            .chat-container {
+                margin-bottom: 150px; /* Space for input */
+                overflow-y: auto;
+                max-height: calc(100vh - 250px);
+            }
+            
+            /* Input field styling */
             .chat-input {
                 flex-grow: 1;
                 margin-right: 0.5rem;
+            }
+            
+            /* Button container */
+            .button-group {
+                display: flex;
+                gap: 0.5rem;
+                align-items: center;
             }
             .diagnostics-box {
                 position: fixed;
@@ -86,18 +134,14 @@ class RAGE:
                 color: white;
                 z-index: 1000;
             }
-            .logo-container {
-                text-align: center;
-                margin-bottom: 1.5rem;
-            }
             </style>
         """, unsafe_allow_html=True)
 
     def display_logo(self):
-        """Display RAGE logo in sidebar."""
+        """Display the RAGE logo in the sidebar."""
         with st.sidebar:
             st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-            st.image("gfx/rage_logo.png", width=200)
+            st.image("gfx/rage_logo.png", width=200)  # Ensure the logo file exists at this path
             st.markdown('</div>', unsafe_allow_html=True)
 
     def input_widget(self):
@@ -106,29 +150,66 @@ class RAGE:
         with container:
             st.markdown('<div class="input-container">', unsafe_allow_html=True)
             
-            col1, col2, col3 = st.columns([8, 1, 1])
-            with col1:
-                prompt = st.text_input(
-                    "DeepSeek with RAGE...", 
-                    key="input_field",
-                    label_visibility="collapsed",
-                    placeholder="Enter your query..."
-                )
-            with col2:
-                if st.button("⏹️", help="Stop current process"):
-                    st.session_state.process_running = False
-                    st.rerun()
-            with col3:
-                if st.button("🔍", help="Search knowledge base"):
-                    st.session_state.show_search = True
+            # Input field
+            prompt = st.text_input(
+                "DeepSeek with RAGE...", 
+                key="input_field",
+                label_visibility="collapsed",
+                placeholder="Enter your query..."
+            )
+            
+            # Buttons floating right
+            st.markdown("""
+                <div class="button-group">
+                    <button class="stButton" title="Upload files" type="button">📁</button>
+                    <button class="stButton" title="Stop process" type="button">⏹️</button>
+                    <button class="stButton" title="Search" type="button">🔍</button>
+                </div>
+            """, unsafe_allow_html=True)
             
             st.markdown('</div>', unsafe_allow_html=True)
         return prompt
 
+    def upload_files_to_context(self):
+        """Upload files to the context folder for retrieval."""
+        uploaded_files = st.file_uploader(
+            "Upload files for context",
+            type=["txt", "md", "json", "pdf", "docx"],
+            accept_multiple_files=True,
+            key="context_uploader"
+        )
+        
+        if uploaded_files:
+            context_dir = Path("./data/conversations/context")
+            context_dir.mkdir(parents=True, exist_ok=True)
+            
+            success_count = 0
+            for uploaded_file in uploaded_files:
+                try:
+                    file_path = context_dir / uploaded_file.name
+                    with open(file_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    
+                    # Store file content in knowledge context
+                    file_content = uploaded_file.getvalue().decode("utf-8")
+                    memory_manager.add_context(ContextEntry(
+                        content=file_content,
+                        context_type=ContextType.KNOWLEDGE,
+                        source="uploaded_file",
+                        metadata={"filename": uploaded_file.name}
+                    ))
+                    success_count += 1
+                except Exception as e:
+                    logger.error(f"Error saving {uploaded_file.name}: {e}")
+                    st.error(f"Failed to save {uploaded_file.name}")
+            
+            if success_count > 0:
+                st.success(f"Uploaded {success_count} file(s) to context storage")
+
     def setup_sidebar(self):
         """Configure sidebar elements."""
         with st.sidebar:
-            self.display_logo()
+            self.display_logo()  # Display the RAGE logo
             st.header("Configuration")
             
             # Model selection and status checks
@@ -146,7 +227,7 @@ class RAGE:
                 min_value=0.0,
                 max_value=1.0,
                 value=st.session_state.temperature,
-                step=0.1,
+                step=0.01,
                 help="Controls the randomness of the model's responses."
             )
             
@@ -182,6 +263,9 @@ class RAGE:
             if not model:
                 return
             
+            # Set temperature in the model
+            model.set_temperature(st.session_state.temperature)
+            
             # Add message to session state
             st.session_state.messages.append({"role": "user", "content": prompt})
             
@@ -207,11 +291,7 @@ class RAGE:
                         )
                         
                         # Generate response
-                        response = model.generate_response(
-                            full_prompt,
-                            temperature=st.session_state.temperature,
-                            stream=st.session_state.streaming
-                        )
+                        response = model.generate_response(full_prompt)
                         
                         if isinstance(model, OllamaHandler) and model.get_last_error():
                             st.error(model.get_last_error())
@@ -255,43 +335,17 @@ class RAGE:
         finally:
             st.session_state.process_running = False
 
-    def initialize_ollama(self) -> Optional[OllamaHandler]:
-        """Initialize or retrieve Ollama model instance."""
-        try:
-            if not st.session_state.model_instances['ollama']:
-                st.session_state.model_instances['ollama'] = OllamaHandler()
-            
-            if st.session_state.model_instances['ollama'].check_installation():
-                available_models = st.session_state.model_instances['ollama'].list_models()
-                if available_models:
-                    if not st.session_state.selected_model:
-                        st.info("Please select an Ollama model to continue")
-                        return None
-                    
-                    if st.session_state.model_instances['ollama'].select_model(st.session_state.selected_model):
-                        return st.session_state.model_instances['ollama']
-                    else:
-                        st.error(st.session_state.model_instances['ollama'].get_last_error())
-                        return None
-                else:
-                    st.error("No Ollama models found. Please pull a model first.")
-                    return None
-            else:
-                st.error("Ollama service is not running. Please start the Ollama service.")
-                return None
-        except Exception as e:
-            logger.error(f"Error initializing Ollama: {e}")
-            st.error(f"Error initializing Ollama: {str(e)}")
-            return None
-
     def run(self):
         """Main application flow."""
         self.setup_sidebar()
         
         # Chat history display at the top
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+        with st.container():
+            st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
+            st.markdown('</div>', unsafe_allow_html=True)
         
         # Input widget at the bottom
         if prompt := self.input_widget():
