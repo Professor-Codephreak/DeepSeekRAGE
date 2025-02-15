@@ -1,3 +1,4 @@
+# gfx is phonetic shortcode for graphics
 
 Filename: gfx/styles.css
 Copyright: 2025 Professor Codephreak GPLv3
