@@ -1,4 +1,4 @@
-Filename: src/locallama.py
+# Filename: src/locallama.py
 Copyright: (c) 2025 Gregory L. Magnusson MIT License
 
 Summary:
@@ -22,7 +22,7 @@ Model verification and pulling
 
 locallama.py provides a comprehensive wrapper around the Ollama API, with robust error handling and configuration options. It's designed to work primarily with Deepseek models but can handle other Ollama-compatible models as well. The implementation includes modern Python features like dataclasses, type hints, and generators for streaming responses.<br />
 
-Filename: src/logger.py<br />
+# Filename: src/logger.py<br />
 Copyright: (c) 2025 Gregory L. Magnusson MIT license<br />
 
 Summary:
@@ -46,7 +46,7 @@ UTF-8 encoding support<br />
 Thread-local storage for context isolation<br />
 The logger is designed to provide comprehensive logging capabilities with structured data support, making it suitable for debugging and monitoring in a production environment. It includes features like log rotation, separate error logging, and thread-safe context management, making it a robust solution for the RAGE project's logging needs.<br />
 
-Filename: memory.py<br />
+# Filename: memory.py<br />
 Copyright: (c) 2025 Gregory L. Magnusson MIT license<br />
 
 Summary:
@@ -70,7 +70,7 @@ Memory serialization and deserialization<br />
 
 memory.py provides a robust memory system with thread safety, error handling, and efficient context retrieval capabilities. It supports different types of context and includes utilities for storing both conversations and knowledge entries, making it a crucial component for RAGE context-aware operations.<br />
 
-Filename: src/openmind.py<br />
+# Filename: src/openmind.py<br />
 Copyright: (c) 2025 Gregory L. Magnusson MIT license<br />
 
 Summary:
