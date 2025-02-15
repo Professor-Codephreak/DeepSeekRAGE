@@ -4,7 +4,6 @@ Copyright: (c) 2025 Gregory L. Magnusson MIT License
 Summary:
 This file implements the OllamaHandler class, which serves as an interface to the Ollama API for local LLM interactions. Key features include:<br />
 
-Core Components:<br />
 OllamaResponse dataclass for structured API responses<br />
 OllamaHandler class for managing Ollama API interactions<br />
 Default Deepseek model configurations<br />
