@@ -1,19 +1,17 @@
 # rage.py (c) 2025 Gregory L. Magnusson MIT license
-# RAGE Retrieval Augmented Generative Engine (c) 2025 rage.pythai.net
 
 import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent))
-
+import psutil
 import streamlit as st
 from typing import Optional
 from src.locallama import OllamaHandler, OllamaResponse
 from src.memory import (
     memory_manager,
-    DialogEntry,
-    store_conversation
+    ContextEntry,
+    store_conversation,
+    ContextType
 )
-# from src.config import get_config, get_model_config  # Commented out
 from src.logger import get_logger
 from src.openmind import OpenMind
 
@@ -25,25 +23,26 @@ class RAGE:
     
     def __init__(self):
         self.setup_session_state()
-        # self.config = get_config()  # Commented out
-        # self.model_config = get_model_config()  # Commented out
         self.load_css()
-        
-        # Initialize systems
         self.memory = memory_manager
         self.openmind = OpenMind()
-    
+
     def setup_session_state(self):
         """Initialize session state variables."""
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-        if 'provider' not in st.session_state:
-            st.session_state.provider = "Ollama"  # Ollama localhost
-        if 'selected_model' not in st.session_state:
-            st.session_state.selected_model = None
-        if 'model_instances' not in st.session_state:
-            st.session_state.model_instances = {'ollama': None}
-    
+        session_vars = {
+            "messages": [],
+            "provider": "Ollama",
+            "selected_model": None,
+            "model_instances": {'ollama': None},
+            "process_running": False,
+            "show_search": False,
+            "temperature": 0.7,  # Default temperature
+            "streaming": True,   # Default streaming enabled
+        }
+        for var, default in session_vars.items():
+            if var not in st.session_state:
+                st.session_state[var] = default
+
     def check_ollama_status(self):
         """Check Ollama installation and available models."""
         try:
@@ -57,44 +56,205 @@ class RAGE:
         except Exception as e:
             logger.error(f"Error checking Ollama status: {e}")
             return False, []
-    
+
     def load_css(self):
-        """Load CSS styling."""
-        try:
-            with open('gfx/styles.css') as f:
-                st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-        except Exception as e:
-            logger.error(f"Error loading CSS: {e}")
-            self.load_default_css()
-    
-    def load_default_css(self):
-        """Load default CSS if custom CSS fails."""
+        """Load custom CSS with input field styling."""
         st.markdown("""
             <style>
-            .cost-tracker { padding: 10px; background: #262730; border-radius: 5px; }
-            .model-info { padding: 10px; background: #1E1E1E; border-radius: 5px; }
-            .capability-tag { 
-                display: inline-block; 
-                padding: 2px 8px; 
-                margin: 2px;
-                background: #3B3B3B; 
-                border-radius: 12px; 
-                font-size: 0.8em; 
-            }
-            .api-key-status {
+            .input-container {
                 display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 5px;
-                margin: 5px 0;
+                position: fixed;
+                bottom: 2rem;
+                width: 65%;
+                background: var(--background-color);
+                padding: 0.5rem;
+                border-radius: 0.5rem;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                z-index: 100;
             }
-            .checkmark {
-                color: #00cc00;
-                font-weight: bold;
+            .chat-input {
+                flex-grow: 1;
+                margin-right: 0.5rem;
+            }
+            .diagnostics-box {
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                padding: 10px;
+                background: rgba(0, 0, 0, 0.8);
+                border-radius: 5px;
+                color: white;
+                z-index: 1000;
+            }
+            .logo-container {
+                text-align: center;
+                margin-bottom: 1.5rem;
             }
             </style>
         """, unsafe_allow_html=True)
-    
+
+    def display_logo(self):
+        """Display RAGE logo in sidebar."""
+        with st.sidebar:
+            st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+            st.image("gfx/rage_logo.png", width=200)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    def input_widget(self):
+        """Custom input widget with integrated buttons."""
+        container = st.container()
+        with container:
+            st.markdown('<div class="input-container">', unsafe_allow_html=True)
+            
+            col1, col2, col3 = st.columns([8, 1, 1])
+            with col1:
+                prompt = st.text_input(
+                    "DeepSeek with RAGE...", 
+                    key="input_field",
+                    label_visibility="collapsed",
+                    placeholder="Enter your query..."
+                )
+            with col2:
+                if st.button("⏹️", help="Stop current process"):
+                    st.session_state.process_running = False
+                    st.rerun()
+            with col3:
+                if st.button("🔍", help="Search knowledge base"):
+                    st.session_state.show_search = True
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+        return prompt
+
+    def setup_sidebar(self):
+        """Configure sidebar elements."""
+        with st.sidebar:
+            self.display_logo()
+            st.header("Configuration")
+            
+            # Model selection and status checks
+            ollama_running, models = self.check_ollama_status()
+            if ollama_running:
+                st.session_state.selected_model = st.selectbox(
+                    "Select Model",
+                    options=models,
+                    index=0
+                )
+            
+            # Temperature slider
+            st.session_state.temperature = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=1.0,
+                value=st.session_state.temperature,
+                step=0.1,
+                help="Controls the randomness of the model's responses."
+            )
+            
+            # Streaming toggle
+            st.session_state.streaming = st.toggle(
+                "Enable Streaming",
+                value=st.session_state.streaming,
+                help="Stream responses in real-time."
+            )
+            
+            # System diagnostics
+            self.display_diagnostics()
+
+    def display_diagnostics(self):
+        """Show real-time system metrics."""
+        cpu = psutil.cpu_percent()
+        ram = psutil.virtual_memory().percent
+        st.markdown(f"""
+            <div class="diagnostics-box">
+                <strong>System Health</strong><br>
+                CPU: {cpu}%<br>
+                RAM: {ram}%
+            </div>
+        """, unsafe_allow_html=True)
+
+    def process_message(self, prompt: str):
+        """Handle message processing with interrupt support."""
+        if not prompt or not st.session_state.process_running:
+            return
+            
+        try:
+            model = self.initialize_ollama()
+            if not model:
+                return
+            
+            # Add message to session state
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Processing with RAGE..."):
+                    try:
+                        # Get relevant context
+                        context = self.memory.get_relevant_context(prompt)
+                        
+                        # Format the input using the user prompt template
+                        user_prompt = self.openmind.get_user_prompt().format(
+                            query=prompt,
+                            context=context
+                        )
+                        
+                        # Combine system prompt and formatted user prompt
+                        full_prompt = (
+                            f"{self.openmind.get_system_prompt()}\n\n"
+                            f"{user_prompt}"
+                        )
+                        
+                        # Generate response
+                        response = model.generate_response(
+                            full_prompt,
+                            temperature=st.session_state.temperature,
+                            stream=st.session_state.streaming
+                        )
+                        
+                        if isinstance(model, OllamaHandler) and model.get_last_error():
+                            st.error(model.get_last_error())
+                            return
+                        
+                        # Extract response text
+                        response_text = response.response if isinstance(response, OllamaResponse) else response
+                        
+                        # Store conversation using ContextEntry
+                        context_entry = ContextEntry(
+                            content=f"Q: {prompt}\nA: {response_text}",
+                            context_type=ContextType.CONVERSATION,
+                            source="user",
+                            metadata={
+                                "provider": st.session_state.provider,
+                                "model": st.session_state.selected_model,
+                                "context": context
+                            }
+                        )
+                        store_conversation(context_entry)
+                        
+                        # Display response
+                        if st.session_state.streaming:
+                            response_placeholder = st.empty()
+                            for chunk in response_text:
+                                response_placeholder.markdown(chunk)
+                        else:
+                            st.markdown(response_text)
+                        
+                        # Add assistant message to session state
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": response_text
+                        })
+                        
+                    except Exception as e:
+                        logger.error(f"Error generating response: {e}")
+                        st.error(f"Error generating response: {str(e)}")
+        except InterruptedError:
+            st.warning("Process stopped by user")
+        finally:
+            st.session_state.process_running = False
+
     def initialize_ollama(self) -> Optional[OllamaHandler]:
         """Initialize or retrieve Ollama model instance."""
         try:
@@ -123,135 +283,23 @@ class RAGE:
             logger.error(f"Error initializing Ollama: {e}")
             st.error(f"Error initializing Ollama: {str(e)}")
             return None
-    
-    def process_message(self, prompt: str):
-        """Process user message and generate response using Ollama."""
-        try:
-            model = self.initialize_ollama()
-            if not model:
-                return
-            
-            # Add message to session state
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            
-            with st.chat_message("assistant"):
-                with st.spinner("Processing with RAGE..."):
-                    try:
-                        # Get relevant context
-                        context = self.memory.get_relevant_context(prompt)
-                        
-                        # Generate response
-                        response = model.generate_response(prompt, context)
-                        
-                        if isinstance(model, OllamaHandler) and model.get_last_error():
-                            st.error(model.get_last_error())
-                            return
-                        
-                        # Extract response text if it's an OllamaResponse object
-                        response_text = response.response if isinstance(response, OllamaResponse) else response
-                        
-                        # Store conversation
-                        dialog_entry = DialogEntry(
-                            query=prompt,
-                            response=response_text,
-                            provider=st.session_state.provider,
-                            model=st.session_state.selected_model,
-                            context={"retrieved_context": context}
-                        )
-                        store_conversation(dialog_entry)
-                        
-                        # Display response
-                        st.markdown(response_text)
-                        
-                        # Add assistant message to session state
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": response_text
-                        })
-                        
-                    except Exception as e:
-                        logger.error(f"Error generating response: {e}")
-                        st.error(f"Error generating response: {str(e)}")
-        except Exception as e:
-            logger.error(f"Error processing message: {e}")
-            st.error("An error occurred while processing your message")
-    
-    def setup_sidebar(self):
-        """Setup sidebar configuration."""
-        with st.sidebar:
-            st.header("RAGE Configuration")
-            
-            # Check Ollama status
-            ollama_running, ollama_models = self.check_ollama_status()
-            if ollama_running:
-                st.markdown("""
-                    <div class="api-key-status">
-                        <span class="checkmark">●</span>
-                        <span class="text">Ollama Running</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                if ollama_models:
-                    st.caption(f"Available models: {', '.join(ollama_models)}")
-            
-            # Model selection
-            if ollama_models:
-                st.session_state.selected_model = st.selectbox(
-                    "Select Ollama Model",
-                    options=ollama_models,
-                    key='ollama_model_select'
-                )
-            
-            # Display model information (commented out since model_config is removed)
-            # if st.session_state.selected_model:
-            #     model_info = self.model_config.get_model_info(
-            #         st.session_state.provider.lower(),
-            #         st.session_state.selected_model
-            #     )
-            #     if model_info:
-            #         st.markdown("### Model Information")
-            #         st.markdown(f"""
-            #         <div class="model-info">
-            #             <p><strong>Model:</strong> {model_info.name}</p>
-            #             <p><strong>Developer:</strong> {model_info.developer}</p>
-            #             <p><strong>Max Tokens:</strong> {model_info.tokens}</p>
-            #             <p><strong>Cost:</strong> {model_info.cost}</p>
-            #             <div><strong>Capabilities:</strong></div>
-            #             {''.join([f'<span class="capability-tag">{cap}</span>' 
-            #                     for cap in model_info.capabilities])}
-            #         </div>
-            #         """, unsafe_allow_html=True)
-    
+
     def run(self):
-        """Run the RAGE interface."""
-        try:
-            st.title("RAGE - Retrieval Augmented Generative Engine")
-            
-            # Setup sidebar
-            self.setup_sidebar()
-            
-            # Chat interface
-            chat_container = st.container()
-            
-            with chat_container:
-                # Display conversation history
-                for message in st.session_state.messages:
-                    with st.chat_message(message["role"]):
-                        st.markdown(message["content"])
-            
-            # Chat input
-            if prompt := st.chat_input("DeepSeek with RAGE..."):
-                self.process_message(prompt)
-            
-        except Exception as e:
-            logger.error(f"Main application error: {e}")
-            st.error("An error occurred in the application. Please refresh the page.")
+        """Main application flow."""
+        self.setup_sidebar()
+        
+        # Chat history display at the top
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+        
+        # Input widget at the bottom
+        if prompt := self.input_widget():
+            st.session_state.process_running = True
+            self.process_message(prompt)
 
 def main():
-    rage = RAGE()
-    rage.run()
+    RAGE().run()
 
 if __name__ == "__main__":
     main()
