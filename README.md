@@ -1,7 +1,7 @@
 # RAGE DeepSeek
 
 ```txt
-your_project/
+DeepSeekRAGE/
 ├── src/
 │   ├── memory.py
 │   ├── logger.py
