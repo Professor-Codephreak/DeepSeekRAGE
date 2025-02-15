@@ -1,4 +1,5 @@
-# src/memory.py
+# memory.py (c) 2025 Gregory L. Magnusson MIT license
+
 import json
 from pathlib import Path
 from datetime import datetime
@@ -44,7 +45,7 @@ class ContextEntry:
         return data
 
 class MemoryManager:
-    """memory manager with short/long-term memory"""
+    """Enhanced memory manager with short/long-term memory"""
     
     _instance = None
     _lock = threading.Lock()
@@ -75,14 +76,14 @@ class MemoryManager:
 
     def _setup_directories(self):
         """Create required memory directories"""
-        (self.base_dir / 'sessions').mkdir(exist_ok=True)
-        (self.base_dir / 'knowledge').mkdir(exist_ok=True)
+        (self.base_dir / 'sessions').mkdir(parents=True, exist_ok=True)
+        (self.base_dir / 'knowledge').mkdir(parents=True, exist_ok=True)
 
     def _load_ltm(self):
         """Load long-term memory with error handling"""
         try:
             if self.ltm_path.exists():
-                with open(self.ltm_path, 'r') as f:
+                with open(self.ltm_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self.ltm = [ContextEntry(**entry) for entry in data]
                 logger.info(f"Loaded {len(self.ltm)} long-term memory entries")
@@ -95,8 +96,8 @@ class MemoryManager:
         with self.ltm_lock:
             temp_path = self.ltm_path.with_suffix('.tmp')
             try:
-                with open(temp_path, 'w') as f:
-                    json.dump([entry.to_dict() for entry in self.ltm], f)
+                with open(temp_path, 'w', encoding='utf-8') as f:
+                    json.dump([entry.to_dict() for entry in self.ltm], f, indent=4)
                 temp_path.replace(self.ltm_path)
                 logger.info(f"Saved {len(self.ltm)} long-term memory entries")
             except Exception as e:
@@ -117,11 +118,17 @@ class MemoryManager:
 
     def _store_conversation(self, entry: ContextEntry):
         """Store conversation context with session tracking"""
-        session_file = self.base_dir / 'sessions' / f"session_{datetime.now():%Y%m%d}.json"
-        
+        session_file = self.base_dir / 'sessions' / f"{entry.timestamp.date()}.json"
         try:
-            with open(session_file, 'a') as f:
-                f.write(json.dumps(entry.to_dict()) + '\n')
+            # Read existing session data if available
+            if session_file.exists():
+                with open(session_file, 'r', encoding='utf-8') as f:
+                    session_data = json.load(f)
+            else:
+                session_data = []
+            session_data.append(entry.to_dict())
+            with open(session_file, 'w', encoding='utf-8') as f:
+                json.dump(session_data, f, indent=4)
             logger.info(f"Stored conversation entry: {entry.id}")
         except Exception as e:
             logger.error(f"Conversation storage failed: {e}")
@@ -146,8 +153,6 @@ class MemoryManager:
     def _calculate_relevance(self, content: str, query: str) -> float:
         """Basic relevance scoring algorithm"""
         content_lower = content.lower()
-        
-        # Simple term frequency scoring
         term_count = sum(1 for word in query.split() if word in content_lower)
         return term_count / len(query.split()) if query else 0
 
@@ -170,7 +175,8 @@ memory_manager = MemoryManager()
 # Utility functions
 def store_conversation(entry: ContextEntry) -> bool:
     """Store conversation entry"""
-    return memory_manager.add_context(entry)
+    memory_manager.add_context(entry)
+    return True
 
 def store_knowledge(text: str, metadata: Dict = None) -> ContextEntry:
     """Store knowledge context"""
