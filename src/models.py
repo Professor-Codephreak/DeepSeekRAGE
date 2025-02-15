@@ -1,5 +1,6 @@
 # src/models.py (c) 2025 Gregory L. Magnusson MIT license
 # api extension for RAGE not currently implemented in DeepSeek RAGE
+# locallama.py is handling ollama as local
 
 from typing import Optional, Dict, Any
 import requests
