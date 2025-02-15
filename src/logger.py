@@ -1,4 +1,5 @@
-# src/logger.py (c) 2025 Gregory L. Magnusson
+# src/logger.py (c) 2025 Gregory L. Magnusson MIT license
+# RAGE logger for logging to logs
 import logging
 import sys
 import json
