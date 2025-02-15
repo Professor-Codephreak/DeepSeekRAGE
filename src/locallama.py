@@ -33,7 +33,7 @@ class OllamaHandler:
         self.base_url = base_url
         self.last_error: Optional[str] = None
         self.selected_model: Optional[str] = None
-        self.temperature: float = 0.314  # Default temperature
+        self.temperature: float = 0.7  # Default temperature
         self.streaming: bool = False  # Default streaming off
 
     def check_installation(self) -> bool:
@@ -116,7 +116,9 @@ class OllamaHandler:
             "model": self.selected_model,
             "prompt": prompt,
             "stream": self.streaming,
-            "temperature": self.temperature,
+            "options": {
+                "temperature": self.temperature,
+            }
         }
         if context:
             payload["context"] = context
