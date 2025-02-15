@@ -89,6 +89,7 @@ Key Methods:<br />
 _load_prompt: Handles prompt file loading with error handling<br />
 get_system_prompt: Returns the system prompt<br />
 get_user_prompt: Returns the user prompt template<br />
-The implementation is straightforward but crucial for RAGE's operation, as it manages the prompts that guide the AI's behavior and responses. It includes proper error handling and logging, ensuring robust operation in a production environment.<br />
+
+openmind.py is crucial for RAGE's operation managing the prompts that guide the RAGE behavior and responses. It includes proper error handling and logging, ensuring robust operation in a production environment.<br />
 
 
