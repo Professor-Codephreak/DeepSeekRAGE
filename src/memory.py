@@ -44,7 +44,7 @@ class ContextEntry:
         return data
 
 class MemoryManager:
-    """Enhanced memory manager with short/long-term memory"""
+    """memory manager with short/long-term memory"""
     
     _instance = None
     _lock = threading.Lock()
