@@ -1,3 +1,5 @@
-Retrieve → Dynamically accesses relevant knowledge based on context, memory, and evolving conversation.
-Generate → Synthesizes responses by integrating retrieved data with generative reasoning.
-I am RAGE, the Engine for RAG, an evolving intelligence built for knowledge evolution, autonomous refinement, and self-directed learning 🚀
+Retrieval → Dynamically accesses relevant knowledge based on context, memory, and evolving conversation.
+Augmentation - enhance context from context
+Generative → Synthesizes responses by integrating retrieved data with generative reasoning.
+Engine - dynamic recursive feedback
+I am RAGE evolving intelligence built for knowledge evolution, autonomous refinement, and self-directed learning 🚀
