@@ -1,10 +1,14 @@
 # rage.py (c) 2025 Gregory L. Magnusson MIT license
 
 import sys
-from pathlib import Path
+import json
+import time
 import psutil
 import streamlit as st
+from pathlib import Path
 from typing import Optional
+from src.logger import get_logger
+from src.openmind import OpenMind
 from src.locallama import OllamaHandler, OllamaResponse
 from src.memory import (
     memory_manager,
@@ -12,8 +16,14 @@ from src.memory import (
     store_conversation,
     ContextType
 )
-from src.logger import get_logger
-from src.openmind import OpenMind
+
+# Set the favicon and page title
+st.set_page_config(
+    page_title="RAGE",          # Title of the page
+    page_icon="gfx/rage.ico",   # Path to the favicon file
+    layout="wide"               # Optional: Set layout to "wide" or "centered"
+)
+
 
 logger = get_logger('rage')
 
@@ -35,8 +45,9 @@ class RAGE:
             "model_instances": {'ollama': None},
             "process_running": False,
             "show_search": False,
-            "temperature": 0.3,
+            "temperature": 0.30,
             "streaming": False,
+            "current_response": "",
         }
         for var, default in session_vars.items():
             if var not in st.session_state:
@@ -51,78 +62,63 @@ class RAGE:
         except FileNotFoundError:
             st.error("Could not find 'gfx/styles.css'. Please ensure it exists.")
 
-    def display_logo(self):
-        """Display the RAGE logo in the sidebar."""
-        with st.sidebar:
-            st.image("gfx/rage_logo.png", width=200)
-
-    def input_widget(self):
-        """
-        A custom input widget pinned at the bottom.
-        Helper buttons appear on the right side.
-        """
-        # Start of bottom input container
-        st.markdown('<div class="input-container">', unsafe_allow_html=True)
-
-        # Text input on the left
-        prompt = st.text_input(
-            "DeepSeek with RAGE...",
-            key="input_field",
-            label_visibility="collapsed",
-            placeholder="Enter your query...",
-        )
-
-        # Helper buttons on the right
+    def display_diagnostics(self):
+        """Display system diagnostics in top right corner."""
+        cpu = psutil.cpu_percent()
+        ram = psutil.virtual_memory().percent
         st.markdown(
-            """
-            <div class="button-group">
-                <button class="stButton" title="Upload files" type="button">📁</button>
-                <button class="stButton" title="Stop process" type="button">⏹️</button>
-                <button class="stButton" title="Search" type="button">🔍</button>
-            </div>
-            """,
+            f'<div class="diagnostics-box">CPU: {cpu}% | RAM: {ram}%</div>',
             unsafe_allow_html=True
         )
-
-        # End of bottom input container
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        return prompt
 
     def setup_sidebar(self):
         """Configure sidebar elements."""
         with st.sidebar:
-            self.display_logo()
-            st.header("Configuration")
+            # Configuration Header
+            st.markdown("### Configuration")
             
-            # Check Ollama status
+            # Model Selection
+            st.markdown("#### Select Model")
             ollama_running, models = self.check_ollama_status()
             if ollama_running and models:
                 st.session_state.selected_model = st.selectbox(
-                    "Select Model",
+                    "Model Selection",
                     options=models,
-                    index=0
+                    index=0 if models else None,
+                    label_visibility="collapsed"
                 )
             
-            # Temperature control
+            # Temperature Slider
+            st.markdown("#### Temperature")
             st.session_state.temperature = st.slider(
-                "Temperature",
-                min_value=0.0,
-                max_value=1.0,
+                "Temperature Control",
+                min_value=0.00,
+                max_value=1.00,
                 value=st.session_state.temperature,
-                step=0.01
+                step=0.01,
+                label_visibility="collapsed",
+                format="%.2f"
             )
             
-            # Streaming toggle
+            # Streaming Toggle
             st.session_state.streaming = st.toggle(
                 "Enable Streaming",
-                value=st.session_state.streaming
+                value=st.session_state.streaming,
+                key="streaming_toggle"
             )
 
-            # Diagnostics
-            cpu = psutil.cpu_percent()
-            ram = psutil.virtual_memory().percent
-            st.markdown(f"**CPU:** {cpu}% | **RAM:** {ram}%")
+            # Conversation History
+            if st.session_state.messages:
+                st.markdown("### Conversation History")
+                for msg in st.session_state.messages:
+                    if msg["role"] == "user":
+                        truncated_content = msg["content"][:50]
+                        if len(msg["content"]) > 50:
+                            truncated_content += "..."
+                        st.markdown(
+                            f'<div class="chat-history-item">{truncated_content}</div>',
+                            unsafe_allow_html=True
+                        )
 
     def check_ollama_status(self):
         """Check Ollama installation and available models."""
@@ -169,15 +165,19 @@ class RAGE:
 
     def process_message(self, prompt: str):
         """Process user input with RAGE engine."""
-        if not prompt or not st.session_state.process_running:
+        if not prompt:
             return
-            
+                
         try:
             model = self.initialize_ollama()
             if not model:
                 return
 
+            # Set model parameters
             model.set_temperature(st.session_state.temperature)
+            model.set_streaming(st.session_state.streaming)
+            
+            # Add user message to history
             st.session_state.messages.append({"role": "user", "content": prompt})
 
             # Show user message
@@ -186,24 +186,47 @@ class RAGE:
 
             # Generate & show assistant response
             with st.chat_message("assistant"):
-                with st.spinner("Processing with RAGE..."):
-                    # Retrieve relevant context
-                    context = self.memory.get_relevant_context(prompt)
+                message_placeholder = st.empty()
+                
+                # Get context and build prompt
+                context = self.memory.get_relevant_context(prompt)
+                user_prompt = self.openmind.get_user_prompt().format(
+                    query=prompt,
+                    context=context
+                )
+                full_prompt = f"{self.openmind.get_system_prompt()}\n\n{user_prompt}"
 
-                    # Build final prompt
-                    user_prompt = self.openmind.get_user_prompt().format(
-                        query=prompt,
-                        context=context
-                    )
-                    full_prompt = (
-                        f"{self.openmind.get_system_prompt()}\n\n{user_prompt}"
-                    )
+                start_time = time.time()
+                
+                # Generate response based on streaming setting
+                if st.session_state.streaming:
+                    full_response = ""
+                    for chunk in model.generate_response(full_prompt):
+                        try:
+                            if isinstance(chunk, str):
+                                chunk_data = json.loads(chunk)
+                                if "response" in chunk_data:
+                                    full_response += chunk_data["response"]
+                                    message_placeholder.markdown(full_response)
+                        except json.JSONDecodeError:
+                            if isinstance(chunk, str):
+                                full_response += chunk
+                                message_placeholder.markdown(full_response)
+                    response_text = full_response
+                    elapsed_time = time.time() - start_time
+                    message_placeholder.markdown(f"{response_text}\n\n*Response time: {elapsed_time:.2f}s*")
+                else:
+                    spinner_placeholder = st.empty()
+                    with spinner_placeholder:
+                        with st.spinner("RAGE is thinking...", show_time=True):
+                            response = model.generate_response(full_prompt)
+                            response_text = response.response if isinstance(response, OllamaResponse) else str(response)
+                            elapsed_time = time.time() - start_time
+                            message_placeholder.markdown(f"{response_text}\n\n*Response time: {elapsed_time:.2f}s*")
+                    spinner_placeholder.empty()
 
-                    # Generate response
-                    response = model.generate_response(full_prompt)
-                    response_text = response.response if isinstance(response, OllamaResponse) else response
-
-                    # Store the Q&A in conversation memory
+                # Store in memory
+                if response_text:
                     store_conversation(ContextEntry(
                         content=f"Q: {prompt}\nA: {response_text}",
                         context_type=ContextType.CONVERSATION,
@@ -215,44 +238,61 @@ class RAGE:
                         }
                     ))
 
-                    # Display the assistant's response
-                    if st.session_state.streaming:
-                        response_placeholder = st.empty()
-                        for chunk in response_text:
-                            response_placeholder.markdown(chunk)
-                    else:
-                        st.markdown(response_text)
-
-                    # Save assistant message in session
+                    # Update session messages
                     st.session_state.messages.append({
                         "role": "assistant",
-                        "content": response_text
+                        "content": f"{response_text}\n\n*Response time: {elapsed_time:.2f}s*"
                     })
 
         except Exception as e:
             logger.error(f"Processing error: {e}")
             st.error(f"Processing error: {str(e)}")
-        finally:
-            st.session_state.process_running = False
 
     def run(self):
         """Main application flow."""
+        # Display diagnostics
+        self.display_diagnostics()
+        
+        # Setup sidebar
         self.setup_sidebar()
         
-        # Display chat messages from top to bottom
+        # Main chat container
         st.markdown('<div class="chat-container">', unsafe_allow_html=True)
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
         st.markdown('</div>', unsafe_allow_html=True)
-
-        # Fixed input at the bottom
-        if prompt := self.input_widget():
-            st.session_state.process_running = True
+        
+        # Input container with inline helper buttons
+        st.markdown('<div class="input-container">', unsafe_allow_html=True)
+        
+        # Chat input
+        prompt = st.chat_input(
+            placeholder="DeepSeek with RAGE...",
+            key="chat_input"
+        )
+        
+        # Helper buttons (inline with send button)
+        st.markdown(
+            """
+            <div class="button-group">
+                <button class="stButton" title="Upload files">📁</button>
+                <button class="stButton" title="Stop process">⏹️</button>
+                <button class="stButton" title="Search">🔍</button>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if prompt:
             self.process_message(prompt)
+
 
 def main():
     RAGE().run()
+
 
 if __name__ == "__main__":
     main()
