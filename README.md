@@ -10,9 +10,8 @@ DeepSeekRAGE/
 ├── gfx/
 │   └── styles.css
 ├── memory/
-│   ├── sessions/
+│   ├── sessions/long_term_memory.json
 │   ├── knowledge/
-│   └── long_term_memory.json
 └── rage.py
 ```
 # DeepSeekRAGE
